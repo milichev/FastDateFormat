@@ -201,7 +201,7 @@
 
 		// ensure Utc masks		
 		for (k in masks) {
-			masks[k + 'Utc'] = 'UTC:' + masks[k];
+			k.slice(-3) !== 'Utc' && (masks[k + 'Utc'] = 'UTC:' + masks[k]);
 		}
 
 		culture[name] = info;
