@@ -1,4 +1,6 @@
-DateFormat
+FastDateFormat
 ==========
 
-Lightning fast JavaScript Date formatting, supporting multiple cultures
+Blazing fast JavaScript Date formatting library supporting multiple cultures.
+
+
