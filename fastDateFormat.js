@@ -9,7 +9,8 @@
 
 	var dateProto = dateC.prototype,
 	    slice = Array.prototype.slice,
-	    token = /d{3,4}|M{3,4}|yy(?:yy)?|([MdHhmsTt])(\1)?|K|zzz|"[^"]*"|'[^']*'/g,
+	    k,
+	    token = /[dM]{3,4}|yy(?:yy)?|([MdHhmsTt])(\1)?|K|zzz|"[^"]*"|'[^']*'/g,
 	    // immutable
 	    defaultMasks = {
 		    "default": "ddd MMM dd yyyy HH:MM:ss",
@@ -27,7 +28,9 @@
 	    },
 	    defaultInfo = {
 		    name: 'en-US',
-		    masks: defaultMasks
+		    masks: defaultMasks,
+		    am: 'AM',
+		    pm: 'PM'
 	    },
 	    defaultArrays = {
 		    DayNames: ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
@@ -65,6 +68,7 @@
 		    "ShortTimePattern": "shortTime",
 		    "YearMonthPattern": "yearMonth"
 	    },
+	    maskMethodNames = ['isoDate', 'isoTime', 'isoDateTime', 'isoShortTime'],
 	    escchars = /["'\x00-\x1f\x7f-\x9f]/g,
 	    expressions = {
 		    d: ['d.get', 'Date()'],
@@ -79,9 +83,8 @@
 		    H: ['d.get', 'Hours()'],
 		    m: ['d.get', 'Minutes()'],
 		    s: ['d.get', 'Seconds()'],
-		    t: ['(d.get', 'Hours()<12?"A":"P")'],
-		    tt: ['(d.get', 'Hours()<12?"AM":"PM")'],
-		    K: '"Z"',
+		    tt: ['(d.get', 'Hours()<12?c.am:c.pm)'],
+		    K: '"Z"', // in not UTC, 'K' is resolved as 'zzz'
 		    zzz: '(z=d.getTimezoneOffset(),v=Math.abs(z),v=Math.floor(v/60)*100+v%60,' +
 			    '(z>0?"-":"+")+(v<10?"000":v<100?"00":v<1000?"0":"")+v)'
 	    };
@@ -89,6 +92,10 @@
 	// pattern flag aliases
 	expressions.T = expressions.t;
 	expressions.TT = expressions.tt;
+
+	for (k in maskCodes) {
+		maskMethodNames.push(maskCodes[k]);
+	}
 
 	dateFormat.culture = culture;
 	dateC.format = dateFormat;
@@ -120,29 +127,29 @@
 		return culture(cultureName).fn(mask, utc)(date);
 	}
 
-	function culture(formatInfo, name, isDef) {
+	function culture(formatInfo, name, isDefault) {
 		/// <summary>Gets or sets date format info for the specified culture</summary>
 		/// <param name="formatInfo">Culture name for the date format info to get,
 		///		OR date format info to set.</param>
 		/// <param name="name">Culture name for the date format info to set.</param>
-		/// <param name="isDef">When setting date format info, specifies if the culture is registered as default one.</param>
+		/// <param name="isDefault">When setting date format info, specifies if the culture is registered as default one.</param>
 		/// <returns type="Object">Date format info</returns>
 
-		// check for default culture
+	    if (typeof name === "boolean") {
+	        isDefault = name;
+	        name = undefined;
+	    }
+
+        // check for default culture
 		// when registering explicitely, the MS AJAX ambient CultureInfo, if any, should be processed first as the default one
 		var nm = typeof formatInfo;
-		if (/* prevent stack overflow */nm != "object" && formatInfo !== theNull && !culture["default"]) {
+		if (!culture["default"] && !isDefault) {
 			// use the current MS AJAX CultureInfo, if any
 			culture(global.__cultureInfo || defaultInfo, true);
 		}
 
 		if (nm == "string" || formatInfo === undefined || formatInfo === theNull) {
 			return formatInfo && culture[formatInfo] || culture["default"];
-		}
-
-		if (typeof name === "boolean") {
-			isDef = name;
-			name = undefined;
 		}
 
 		// initialize culture format info
@@ -153,13 +160,13 @@
 
 		formatInfo.dateTimeFormat && (formatInfo = formatInfo.dateTimeFormat);
 
-		var info = {
-			name: name,
-			fn: fn,
-			masks: {}
-		};
-		var k, mask;
-		var masks = info.masks;
+		var k, mask,
+		    info = {
+			    name: name,
+			    fn: fn,
+			    masks: {}
+		    },
+		    masks = info.masks;
 
 		// fill info arrays (DayNames etc.)
 		for (k in defaultArrays) {
@@ -168,9 +175,13 @@
 		}
 
 		// ensure day name in the long date pattern
+		// fix on the source object too
 		if ((mask = formatInfo.LongDatePattern) && !mask.match(/d{3,4}/)) {
 			formatInfo.LongDatePattern = 'dddd, ' + mask;
 		}
+
+		info.am = typeof(k = formatInfo.AMDesignator) == "string" ? k : formatInfo.am || '';
+		info.pm = typeof(k = formatInfo.PMDesignator) == "string" ? k : formatInfo.pm || '';
 
 		// first, try to copy from source by MS AJAX CultureInfo naming
 		for (k in msAjaxPropMap) {
@@ -207,7 +218,7 @@
 		culture[name] = info;
 
 		// ensure the default culture
-		if (isDef) {
+		if (isDefault) {
 			culture["default"] = info;
 			dateFormat.masks = masks;
 			resetMeths();
@@ -240,14 +251,7 @@
 	function resetMeths() {
 		/// <summary>Creates accessor format methods, f.x.: Date.format.shortDate(date, utc). See `maskCodes`</summary>
 
-		var k;
-		var names = ['isoDate', 'isoTime', 'isoDateTime', 'isoShortTime'];
-
-		for (k in maskCodes) {
-			names.push(maskCodes[k]);
-		}
-
-		for (var i = 0, l = names.length; i < l; i++) {
+		for (var i = 0, l = maskMethodNames.length; i < l; i++) {
 			(function(maskName) {
 				var localFormatter, utcFormatter;
 
@@ -268,7 +272,7 @@
 					}
 					return utcFormatter(date);
 				};
-			})(names[i]);
+			})(maskMethodNames[i]);
 		}
 	}
 
@@ -276,45 +280,42 @@
 		var body = 'var _=Date,v,z,c=_.format.culture["' + formatInfo.name + '"];' +
 			'd=d?(d.constructor===_?d:new _(d)):new _;' +
 			'if(isNaN(d))throw Error("invalid date");' +
-			'return ""+';
+			'return ""';
 
 		var last = token.lastIndex = 0;
 		var match;
 
 		while (match = token.exec(mask)) {
+			// check for paddable MM, dd, hh, HH, mm, ss
 			var pad = (pad = match[2]) && pad != 't' && pad != 'T';
 			var str = pad ? match[1] : match[0];
 			match = match[0];
 			// append not quoted (hence hot catched) literals, if any
 			if (last < token.lastIndex - match.length) {
-				body += '"' + esc(mask.slice(last, token.lastIndex - match.length)) + '"+';
+				body += esc(mask.slice(last, token.lastIndex - match.length));
 			}
 			var expInfo = expressions[str];
 			if (expInfo) {
 				// build date part
 				var tp = typeof expInfo;
 				var exp;
-				body += (tp === "function" ?
+				body += '+' + (tp === "function" ?
 					expInfo(utc)
 					: tp === "string"
 						? str == 'K' && !utc ? expressions.zzz : expInfo
 						: (exp = expInfo[0] + (utc ? 'UTC' : '') + expInfo[1], pad ? '(v=' + exp + ',(v<10?"0":"")+v)' : exp)
-				) + '+';
+				);
 			} else {
 				// append quoted literal
 				match = match.slice(1, match.length - 1);
-				body += '"' + esc(match) + '"+';
+				body += esc(match);
 			}
 			last = token.lastIndex;
 		}
 		// check for trailing not quoted literal
 		if (last < mask.length) {
-			body += '"' + esc(mask.slice(last)) + '"';
-		} else {
-			// otherwise trim trailing '+'
-			body = body.slice(0, -1);
+			body += esc(mask.slice(last));
 		}
-		body += ';';
 		try {
 			return new Function('d', body);
 		} catch(e) {
@@ -325,7 +326,7 @@
 
 	function esc(str) {
 		/// <summary>Escapes chars in `str` to use it as js literal in the formatter function.</summary>
-		return str.replace(escchars, escrepl);
+		return '+"' + str.replace(escchars, escrepl) + '"';
 	}
 
 	function escrepl(c) {
