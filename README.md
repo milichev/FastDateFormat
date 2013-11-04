@@ -1,7 +1,7 @@
 # FastDateFormat
 
 
-_Blazing fast JavaScript Date formatting library supporting multiple cultures._
+_[Blazing fast](http://jsperf.com/levithan-vs-milichev-date-format/2) JavaScript Date formatting library supporting multiple cultures._
 
 ## Formatting
 
@@ -77,6 +77,7 @@ Date.format.culture({
 
 ## Performance Tests
 
-[Levithan vs Milichev date format](http://jsperf.com/levithan-vs-milichev-date-format)
+1. [Levithan vs Milichev date format](http://jsperf.com/levithan-vs-milichev-date-format)
+2. [The same + Kendo UI toString()](http://jsperf.com/levithan-vs-milichev-date-format/2)
 
 
